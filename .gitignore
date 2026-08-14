@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+
+# Large data files
+data/
+raw_data/
+
+# Model weights
+models/*.pt
+
+# Temporary files
+*.tmp
+
+# VS Code
+.vscode/
+
+# Evaluation outputs
+results/*.json
+
+# Python cache
+__pycache__/
+
+# Evaluation outputs
+src/evaluation_results*.json
+
+# Windows files
+desktop.ini
