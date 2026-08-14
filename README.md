@@ -196,29 +196,29 @@ To strengthen the electrical engineering aspect of the project, future developme
 
 
 ---
-
 ## Project Structure
 
+```text
 EEG_Seizure_Project/
 │
-├── data/
-├── raw_data/
-├── models/
-├── results/
-├── scripts/
+├── data/                  # Dataset files (ignored)
+├── raw_data/              # Raw EEG files (ignored)
+├── models/                # Trained model weights
+├── results/               # Evaluation results
+├── scripts/               # Data preparation and experiment scripts
 │
-├── src/
+├── src/                   # Main source code
 │   ├── train.py
 │   ├── evaluate.py
 │   ├── read_eeg.py
 │   └── chbmit_pytorch_dataset.py
 │
-├── analysis/
-│   ├── false_positive_analysis.py
-│   └── seizure_analysis.py
+├── analysis/              # Error analysis and visualization scripts
 │
 ├── README.md
 └── .gitignore
+```
+
 ---
 
 # Technologies Used
