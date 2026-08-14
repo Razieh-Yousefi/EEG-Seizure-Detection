@@ -1,0 +1,414 @@
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+import tensorflow as tf
+
+
+# ============================================================
+# PATHS
+# ============================================================
+
+PROJECT_DIR = r"C:\Users\rezay\Desktop\EEG_Seizure_Project"
+
+X_TEST_FILE = os.path.join(
+    PROJECT_DIR,
+    "X_test_full.npy"
+)
+
+Y_TEST_FILE = os.path.join(
+    PROJECT_DIR,
+    "y_test_full.npy"
+)
+
+MODEL_FILE = os.path.join(
+    PROJECT_DIR,
+    "eeg_seizure_cnn_full_model.keras"
+)
+
+OUTPUT_DIR = os.path.join(
+    PROJECT_DIR,
+    "missed_seizure_analysis"
+)
+
+os.makedirs(
+    OUTPUT_DIR,
+    exist_ok=True
+)
+
+
+# ============================================================
+# MISSED SEIZURE
+# ============================================================
+
+MISSED_INDEX = 2815
+
+
+# ============================================================
+# CHECK FILES
+# ============================================================
+
+print("\n" + "=" * 70)
+print("CHECKING REQUIRED FILES")
+print("=" * 70)
+
+required_files = [
+    X_TEST_FILE,
+    Y_TEST_FILE,
+    MODEL_FILE
+]
+
+for file in required_files:
+
+    print(file)
+
+    if not os.path.exists(file):
+
+        raise FileNotFoundError(
+            "\nFILE NOT FOUND:\n" + file
+        )
+
+print("\nAll required files found.")
+
+
+# ============================================================
+# LOAD DATA
+# ============================================================
+
+print("\n" + "=" * 70)
+print("LOADING TEST DATA")
+print("=" * 70)
+
+X_test = np.load(
+    X_TEST_FILE
+)
+
+y_test = np.load(
+    Y_TEST_FILE
+)
+
+print(
+    "X_test shape:",
+    X_test.shape
+)
+
+print(
+    "y_test shape:",
+    y_test.shape
+)
+
+
+# ============================================================
+# CHECK MISSED SAMPLE
+# ============================================================
+
+print("\n" + "=" * 70)
+print("CHECKING MISSED SEIZURE")
+print("=" * 70)
+
+print(
+    "Test index:",
+    MISSED_INDEX
+)
+
+print(
+    "True label:",
+    y_test[MISSED_INDEX]
+)
+
+
+if y_test[MISSED_INDEX] != 1:
+
+    raise ValueError(
+        "The selected index is not a seizure sample."
+    )
+
+
+# ============================================================
+# EXTRACT EEG
+# ============================================================
+
+eeg = X_test[
+    MISSED_INDEX
+]
+
+print(
+    "\nEEG shape:",
+    eeg.shape
+)
+
+print(
+    "Number of channels:",
+    eeg.shape[0]
+)
+
+print(
+    "Number of samples:",
+    eeg.shape[1]
+)
+
+
+# ============================================================
+# BASIC SIGNAL STATISTICS
+# ============================================================
+
+print("\n" + "=" * 70)
+print("EEG SIGNAL STATISTICS")
+print("=" * 70)
+
+for channel in range(eeg.shape[0]):
+
+    signal = eeg[channel]
+
+    print(
+        f"Channel {channel + 1:02d} | "
+        f"Min={np.min(signal): .6f} | "
+        f"Max={np.max(signal): .6f} | "
+        f"Mean={np.mean(signal): .6f} | "
+        f"Std={np.std(signal): .6f}"
+    )
+
+
+# ============================================================
+# CHANNEL AMPLITUDE
+# ============================================================
+
+print("\n" + "=" * 70)
+print("CHANNEL AMPLITUDE ANALYSIS")
+print("=" * 70)
+
+channel_std = np.std(
+    eeg,
+    axis=1
+)
+
+channel_range = (
+    np.max(eeg, axis=1)
+    -
+    np.min(eeg, axis=1)
+)
+
+print("\nChannels ranked by standard deviation:")
+
+std_order = np.argsort(
+    channel_std
+)[::-1]
+
+for rank, channel in enumerate(
+    std_order,
+    start=1
+):
+
+    print(
+        f"{rank:02d}. "
+        f"Channel {channel + 1:02d} | "
+        f"STD={channel_std[channel]:.6f}"
+    )
+
+
+print("\nChannels ranked by amplitude range:")
+
+range_order = np.argsort(
+    channel_range
+)[::-1]
+
+for rank, channel in enumerate(
+    range_order,
+    start=1
+):
+
+    print(
+        f"{rank:02d}. "
+        f"Channel {channel + 1:02d} | "
+        f"Range={channel_range[channel]:.6f}"
+    )
+
+
+# ============================================================
+# LOAD MODEL
+# ============================================================
+
+print("\n" + "=" * 70)
+print("LOADING MODEL")
+print("=" * 70)
+
+model = tf.keras.models.load_model(
+    MODEL_FILE
+)
+
+print(
+    "Model loaded successfully."
+)
+
+
+# ============================================================
+# MODEL PREDICTION
+# ============================================================
+
+print("\n" + "=" * 70)
+print("MODEL PREDICTION")
+print("=" * 70)
+
+eeg_cnn = np.transpose(
+    eeg,
+    (1, 0)
+)
+
+eeg_cnn = np.expand_dims(
+    eeg_cnn,
+    axis=0
+)
+
+probability = model.predict(
+    eeg_cnn,
+    verbose=0
+)[0][0]
+
+print(
+    "Seizure probability:",
+    f"{probability:.8f}"
+)
+
+print(
+    "Normal probability:",
+    f"{1.0 - probability:.8f}"
+)
+
+print(
+    "Prediction @ 0.50:",
+    int(probability >= 0.50)
+)
+
+
+# ============================================================
+# PLOT ALL CHANNELS
+# ============================================================
+
+print("\n" + "=" * 70)
+print("CREATING EEG PLOT")
+print("=" * 70)
+
+plt.figure(
+    figsize=(16, 24)
+)
+
+offset = 0.0
+
+for channel in range(
+    eeg.shape[0]
+):
+
+    signal = eeg[channel]
+
+    scale = np.max(
+        np.abs(signal)
+    )
+
+    if scale == 0:
+        scale = 1.0
+
+    normalized = (
+        signal / scale
+    )
+
+    plt.plot(
+        normalized + offset,
+        linewidth=0.7
+    )
+
+    plt.text(
+        -10,
+        offset,
+        f"Ch {channel + 1:02d}",
+        fontsize=9
+    )
+
+    offset += 3.0
+
+
+plt.title(
+    "Missed Seizure EEG - Test Index 2815"
+)
+
+plt.xlabel(
+    "Sample"
+)
+
+plt.ylabel(
+    "Normalized EEG Channels"
+)
+
+plt.grid(
+    alpha=0.2
+)
+
+plt.tight_layout()
+
+
+plot_file = os.path.join(
+    OUTPUT_DIR,
+    "missed_seizure_2815.png"
+)
+
+plt.savefig(
+    plot_file,
+    dpi=150
+)
+
+plt.close()
+
+
+# ============================================================
+# SAVE RAW MISSED EEG
+# ============================================================
+
+raw_file = os.path.join(
+    OUTPUT_DIR,
+    "missed_seizure_2815.npy"
+)
+
+np.save(
+    raw_file,
+    eeg
+)
+
+
+# ============================================================
+# FINAL SUMMARY
+# ============================================================
+
+print("\n" + "=" * 70)
+print("ANALYSIS COMPLETE")
+print("=" * 70)
+
+print(
+    "\nMissed seizure index:",
+    MISSED_INDEX
+)
+
+print(
+    "Seizure probability:",
+    f"{probability:.8f}"
+)
+
+print(
+    "Prediction @ 0.50:",
+    int(probability >= 0.50)
+)
+
+print(
+    "\nEEG plot saved to:"
+)
+
+print(
+    plot_file
+)
+
+print(
+    "\nRaw EEG saved to:"
+)
+
+print(
+    raw_file
+)
+
+print("\nDONE.")
