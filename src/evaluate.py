@@ -368,6 +368,7 @@ def find_best_threshold(
     probabilities
 ):
 
+
     thresholds = np.arange(
         0.05,
         0.951,
@@ -375,14 +376,41 @@ def find_best_threshold(
     )
 
 
-    best_threshold = 0.50
+    TARGET_PRECISION = 0.80
 
-    best_f1 = -1.0
+
+    best_threshold = 0.50
 
     best_metrics = None
 
 
+    best_recall = -1.0
+
+
+
+    print()
+
+    print("=" * 70)
+
+    print("THRESHOLD SEARCH")
+
+    print("=" * 70)
+
+    print()
+
+    print(
+        "Target precision:",
+        TARGET_PRECISION
+    )
+
+
+
+    candidates = []
+
+
+
     for threshold in thresholds:
+
 
 
         predictions = (
@@ -392,21 +420,139 @@ def find_best_threshold(
         )
 
 
+
         metrics = calculate_metrics(
             y_true,
             predictions
         )
 
 
-        if metrics["f1"] > best_f1:
 
-            best_f1 = metrics["f1"]
+        print(
+            f"Threshold={threshold:.2f} "
+            f"Precision={metrics['precision']:.3f} "
+            f"Recall={metrics['recall']:.3f} "
+            f"F1={metrics['f1']:.3f} "
+            f"FP={metrics['fp']} "
+            f"FN={metrics['fn']}"
+        )
 
-            best_threshold = float(
-                threshold
+
+
+        if metrics["precision"] >= TARGET_PRECISION:
+
+
+            candidates.append(
+                (
+                    threshold,
+                    metrics
+                )
             )
 
-            best_metrics = metrics
+
+
+            if metrics["recall"] > best_recall:
+
+
+                best_recall = metrics["recall"]
+
+                best_threshold = float(
+                    threshold
+                )
+
+                best_metrics = metrics
+
+
+
+    # --------------------------------------------------------
+    # اگر هیچ threshold به precision هدف نرسید
+    # --------------------------------------------------------
+
+    if best_metrics is None:
+
+
+        print()
+
+        print(
+            "No threshold reached target precision."
+        )
+
+
+        print(
+            "Selecting highest precision threshold."
+        )
+
+
+
+        best_precision = -1.0
+
+
+
+        for threshold in thresholds:
+
+
+
+            predictions = (
+                probabilities >= threshold
+            ).astype(
+                np.int64
+            )
+
+
+
+            metrics = calculate_metrics(
+                y_true,
+                predictions
+            )
+
+
+
+            if metrics["precision"] > best_precision:
+
+
+                best_precision = metrics["precision"]
+
+                best_threshold = float(
+                    threshold
+                )
+
+                best_metrics = metrics
+
+
+
+    print()
+
+    print("=" * 70)
+
+    print(
+        "SELECTED THRESHOLD"
+    )
+
+    print("=" * 70)
+
+
+    print(
+        "Threshold:",
+        f"{best_threshold:.2f}"
+    )
+
+
+    print(
+        "Precision:",
+        f"{best_metrics['precision']:.4f}"
+    )
+
+
+    print(
+        "Recall:",
+        f"{best_metrics['recall']:.4f}"
+    )
+
+
+    print(
+        "F1:",
+        f"{best_metrics['f1']:.4f}"
+    )
 
 
     return (
@@ -415,6 +561,39 @@ def find_best_threshold(
     )
 
 
+def evaluate_thresholds(
+    y_true,
+    probabilities,
+    thresholds
+):
+
+    results=[]
+
+
+    for threshold in thresholds:
+
+        predictions = (
+            probabilities >= threshold
+        ).astype(np.int64)
+
+
+        metrics = calculate_metrics(
+            y_true,
+            predictions
+        )
+
+
+        metrics["threshold"] = float(
+            threshold
+        )
+
+
+        results.append(
+            metrics
+        )
+
+
+    return results
 
 # ============================================================
 # INFERENCE FUNCTION
@@ -889,7 +1068,6 @@ def main():
     print("8. TEST INFERENCE")
     print("=" * 70)
 
-
     y_test, test_probabilities = run_inference(
         model,
         test_loader
@@ -901,6 +1079,92 @@ def main():
     print(
         "[OK] Test inference completed"
     )
+
+
+    # ========================================================
+    # THRESHOLD COMPARISON
+    # ========================================================
+
+
+    thresholds = [
+
+        0.50,
+
+        0.60,
+
+        0.70,
+
+        0.80,
+
+        0.90,
+
+        0.95
+
+    ]
+
+
+    threshold_results = evaluate_thresholds(
+
+        y_test,
+
+        test_probabilities,
+
+        thresholds
+
+    )
+
+
+    print()
+
+    print("="*70)
+
+    print(
+        "THRESHOLD COMPARISON"
+    )
+
+    print("="*70)
+
+
+
+    for r in threshold_results:
+
+
+        print()
+
+        print(
+            "Threshold:",
+            r["threshold"]
+        )
+
+
+        print(
+            "Precision:",
+            f"{r['precision']:.4f}"
+        )
+
+
+        print(
+            "Recall:",
+            f"{r['recall']:.4f}"
+        )
+
+
+        print(
+            "F1:",
+            f"{r['f1']:.4f}"
+        )
+
+
+        print(
+            "FP:",
+            r["fp"]
+        )
+
+
+        print(
+            "FN:",
+            r["fn"]
+        )
 
 
     # ========================================================

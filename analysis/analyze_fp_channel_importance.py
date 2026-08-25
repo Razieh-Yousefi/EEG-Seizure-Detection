@@ -1,391 +1,827 @@
-# ================================================================
-# analyze_fp_channel_importance.py
-#
-# Channel importance analysis for false positives.
-#
-# PURPOSE:
-# - Compare EEG channels between TP and FP.
-# - Identify channels contributing to FP patterns.
-# - Rank channels by FP/TP activity difference.
-#
-# NO MODEL MODIFICATION
-# NO DATA MODIFICATION
-# NO THRESHOLD OPTIMIZATION
-# ================================================================
-
-import os
+from pathlib import Path
 import json
+
 import numpy as np
+import matplotlib.pyplot as plt
 
 
-# ================================================================
-# CONFIGURATION
-# ================================================================
+# ============================================================
+# PROJECT PATHS
+# ============================================================
 
-BASE_DIR = os.path.dirname(
-    os.path.abspath(__file__)
-)
+PROJECT_DIR = Path(__file__).resolve().parents[1]
 
-X_FILE = os.path.join(
-    BASE_DIR,
-    "X_chbmit_full.npy"
-)
+DATA_DIR = PROJECT_DIR / "data"
+RESULTS_DIR = PROJECT_DIR / "results"
 
-Y_FILE = os.path.join(
-    BASE_DIR,
-    "y_chbmit_full.npy"
-)
+X_PATH = DATA_DIR / "X_chbmit_full.npy"
+NORMALIZATION_PATH = DATA_DIR / "normalization_params.npz"
+PROBABILITY_PATH = RESULTS_DIR / "test_window_probabilities.npz"
 
-TEST_INDICES_FILE = os.path.join(
-    BASE_DIR,
-    "test_indices.npy"
-)
-
-PROB_FILE = os.path.join(
-    BASE_DIR,
-    "test_window_probabilities.npz"
-)
-
-THRESHOLD_FILE = os.path.join(
-    BASE_DIR,
-    "validation_threshold_results.json"
-)
-
-OUTPUT_FILE = os.path.join(
-    BASE_DIR,
-    "fp_channel_importance_results.json"
-)
+OUTPUT_JSON = RESULTS_DIR / "fp_tp_channel_analysis.json"
+OUTPUT_DIR = RESULTS_DIR / "fp_tp_channel_plots"
 
 
-# ================================================================
-# HEADER
-# ================================================================
+# ============================================================
+# SETTINGS
+# ============================================================
 
-print()
+THRESHOLD = 0.50
+
+EXPECTED_CHANNELS = 23
+EXPECTED_SAMPLES = 1280
+
+TOP_CHANNELS = 10
+
+
+# ============================================================
+# CHECK FILES
+# ============================================================
+
 print("=" * 70)
-print("FALSE-POSITIVE CHANNEL IMPORTANCE ANALYSIS")
+print("FP vs TP CHANNEL-WISE ANALYSIS")
 print("=" * 70)
 
-print()
-print("Base directory:")
-print(BASE_DIR)
+print("\nLoading files...")
+
+for path in [
+    X_PATH,
+    NORMALIZATION_PATH,
+    PROBABILITY_PATH
+]:
+
+    if not path.exists():
+
+        raise FileNotFoundError(
+            f"File not found:\n{path}"
+        )
 
 
-# ================================================================
-# LOAD FILES
-# ================================================================
-
-print()
-print("=" * 70)
-print("1. LOADING DATA")
-print("=" * 70)
-
+# ============================================================
+# LOAD DATA
+# ============================================================
 
 X = np.load(
-    X_FILE
+    X_PATH,
+    mmap_mode="r"
 )
 
-y = np.load(
-    Y_FILE
+normalization = np.load(
+    NORMALIZATION_PATH
 )
 
-test_indices = np.load(
-    TEST_INDICES_FILE
+channel_mean = np.asarray(
+    normalization["channel_mean"],
+    dtype=np.float32
 )
 
-
-prob_data = np.load(
-    PROB_FILE
+channel_std = np.asarray(
+    normalization["channel_std"],
+    dtype=np.float32
 )
 
-probabilities = prob_data[
-    "probabilities"
-]
-
-
-print()
-print("X shape:")
-print(X.shape)
-
-print("y shape:")
-print(y.shape)
-
-print("test samples:")
-print(len(test_indices))
-
-
-# ================================================================
-# LOAD THRESHOLD
-# ================================================================
-
-with open(
-    THRESHOLD_FILE,
-    "r",
-    encoding="utf-8"
-) as f:
-
-    threshold_data = json.load(f)
-
-
-def find_threshold(obj):
-
-    if isinstance(obj, dict):
-
-        for k in [
-            "selected_threshold",
-            "validation_threshold",
-            "threshold",
-            "best_threshold"
-        ]:
-
-            if k in obj:
-
-                return float(obj[k])
-
-        for v in obj.values():
-
-            r = find_threshold(v)
-
-            if r is not None:
-                return r
-
-    elif isinstance(obj, list):
-
-        for item in obj:
-
-            r = find_threshold(item)
-
-            if r is not None:
-                return r
-
-    return None
-
-
-threshold = find_threshold(
-    threshold_data
+prediction_data = np.load(
+    PROBABILITY_PATH,
+    allow_pickle=True
 )
 
 
-print()
-print(
-    "Threshold:",
-    threshold
+print("\nX shape:", X.shape)
+
+
+# ============================================================
+# VALIDATION
+# ============================================================
+
+if X.ndim != 3:
+
+    raise ValueError(
+        "X must be a 3D array."
+    )
+
+
+if X.shape[1] != EXPECTED_CHANNELS:
+
+    raise ValueError(
+        f"Expected {EXPECTED_CHANNELS} channels, "
+        f"got {X.shape[1]}"
+    )
+
+
+if X.shape[2] != EXPECTED_SAMPLES:
+
+    raise ValueError(
+        f"Expected {EXPECTED_SAMPLES} samples, "
+        f"got {X.shape[2]}"
+    )
+
+
+if channel_mean.shape != (
+    EXPECTED_CHANNELS,
+):
+
+    raise ValueError(
+        "Invalid channel mean shape."
+    )
+
+
+if channel_std.shape != (
+    EXPECTED_CHANNELS,
+):
+
+    raise ValueError(
+        "Invalid channel std shape."
+    )
+
+
+# ============================================================
+# LOAD PREDICTION DATA
+# ============================================================
+
+test_indices = np.asarray(
+    prediction_data["test_indices"]
 )
 
+patients = np.asarray(
+    prediction_data["patients"]
+)
 
-# ================================================================
-# CREATE TEST GROUPS
-# ================================================================
+labels = np.asarray(
+    prediction_data["labels"]
+).reshape(-1)
 
-print()
-print("=" * 70)
-print("2. CREATING TP / FP GROUPS")
-print("=" * 70)
-
-
-y_test = y[
-    test_indices
-]
-
-
-X_test = X[
-    test_indices
-]
+probabilities = np.asarray(
+    prediction_data["probabilities"]
+).reshape(-1
+)
 
 
 predictions = (
-    probabilities >= threshold
+    probabilities >= THRESHOLD
 ).astype(int)
 
 
 tp_mask = (
+    (labels == 1) &
     (predictions == 1)
-    &
-    (y_test == 1)
 )
-
 
 fp_mask = (
+    (labels == 0) &
     (predictions == 1)
-    &
-    (y_test == 0)
 )
 
 
-print()
+tp_positions = np.where(
+    tp_mask
+)[0]
+
+fp_positions = np.where(
+    fp_mask
+)[0]
+
+
+print("\n" + "=" * 70)
+print("CLASSIFICATION")
+print("=" * 70)
+
 print(
     "TP:",
-    tp_mask.sum()
+    len(tp_positions)
 )
 
 print(
     "FP:",
-    fp_mask.sum()
+    len(fp_positions)
 )
 
 
-TP = X_test[
-    tp_mask
-]
+# ============================================================
+# FEATURE EXTRACTION
+# ============================================================
 
-FP = X_test[
-    fp_mask
-]
+def load_normalized_window(
+    sample_index
+):
 
-
-# ================================================================
-# CHANNEL FEATURE EXTRACTION
-# ================================================================
-
-print()
-print("=" * 70)
-print("3. CHANNEL FEATURE EXTRACTION")
-print("=" * 70)
-
-
-def channel_statistics(data):
-
-    # data:
-    # samples x channels x time
-
-    rms = np.sqrt(
-        np.mean(
-            data ** 2,
-            axis=2
-        )
+    sample_index = int(
+        sample_index
     )
 
-    ptp = (
-        np.max(
-            data,
-            axis=2
-        )
-        -
-        np.min(
-            data,
-            axis=2
-        )
+    raw = np.asarray(
+        X[sample_index],
+        dtype=np.float32
     )
 
-    return {
+    normalized = (
+        raw -
+        channel_mean[:, None]
+    ) / channel_std[:, None]
 
-        "rms_mean":
-            np.mean(
-                rms,
-                axis=0
-            ),
+    return normalized
 
-        "ptp_mean":
-            np.mean(
-                ptp,
-                axis=0
-            )
+
+def calculate_channel_features(
+    window
+):
+
+    features = {
+
+        "rms": [],
+        "std": [],
+        "variance": [],
+        "peak_to_peak": [],
+        "max_abs": [],
+        "line_length": [],
+        "zero_crossing_rate": [],
+
     }
 
 
-tp_stats = channel_statistics(
-    TP
-)
+    for channel in window:
 
-fp_stats = channel_statistics(
-    FP
-)
+        centered = (
+            channel -
+            np.mean(channel)
+        )
 
+        signs = np.sign(
+            centered
+        )
 
-# ================================================================
-# COMPARE CHANNELS
-# ================================================================
+        crossings = np.sum(
+            signs[:-1] !=
+            signs[1:]
+        )
 
-print()
-print("=" * 70)
-print("4. CHANNEL RANKING")
-print("=" * 70)
-
-
-rms_ratio = (
-    fp_stats["rms_mean"]
-    /
-    (tp_stats["rms_mean"] + 1e-12)
-)
-
-
-ptp_ratio = (
-    fp_stats["ptp_mean"]
-    /
-    (tp_stats["ptp_mean"] + 1e-12)
-)
+        zcr = (
+            crossings /
+            max(
+                1,
+                len(channel) - 1
+            )
+        )
 
 
-ranking = np.argsort(
-    rms_ratio
-)[::-1]
+        features["rms"].append(
+            np.sqrt(
+                np.mean(
+                    channel ** 2
+                )
+            )
+        )
+
+        features["std"].append(
+            np.std(channel)
+        )
+
+        features["variance"].append(
+            np.var(channel)
+        )
+
+        features["peak_to_peak"].append(
+            np.max(channel) -
+            np.min(channel)
+        )
+
+        features["max_abs"].append(
+            np.max(
+                np.abs(channel)
+            )
+        )
+
+        features["line_length"].append(
+            np.sum(
+                np.abs(
+                    np.diff(channel)
+                )
+            )
+        )
+
+        features[
+            "zero_crossing_rate"
+        ].append(
+            zcr
+        )
 
 
-print()
-print(
-    "Top channels by FP/TP RMS ratio:"
-)
+    return {
+        key: np.asarray(
+            value,
+            dtype=np.float64
+        )
+        for key, value
+        in features.items()
+    }
 
 
-for i, ch in enumerate(
-    ranking[:10],
-    1
+# ============================================================
+# COLLECT CHANNEL FEATURES
+# ============================================================
+
+FEATURE_NAMES = [
+
+    "rms",
+    "std",
+    "variance",
+    "peak_to_peak",
+    "max_abs",
+    "line_length",
+    "zero_crossing_rate",
+
+]
+
+
+def collect_features(
+    positions,
+    name
 ):
 
+    collected = {
+        feature: []
+        for feature
+        in FEATURE_NAMES
+    }
+
+
     print(
-        f"{i:02d}. "
-        f"Channel {ch:02d} | "
-        f"ratio={rms_ratio[ch]:.4f} | "
-        f"FP={fp_stats['rms_mean'][ch]:.6f} | "
-        f"TP={tp_stats['rms_mean'][ch]:.6f}"
+        f"\nExtracting {name}..."
     )
 
 
-# ================================================================
+    for position in positions:
+
+        sample_index = int(
+            test_indices[position]
+        )
+
+        window = load_normalized_window(
+            sample_index
+        )
+
+        features = calculate_channel_features(
+            window
+        )
+
+
+        for feature in FEATURE_NAMES:
+
+            collected[
+                feature
+            ].append(
+                features[feature]
+            )
+
+
+    return {
+        feature: np.stack(
+            values,
+            axis=0
+        )
+        for feature, values
+        in collected.items()
+    }
+
+
+tp_features = collect_features(
+    tp_positions,
+    "TP windows"
+)
+
+fp_features = collect_features(
+    fp_positions,
+    "FP windows"
+)
+
+
+# ============================================================
+# CHANNEL-WISE COMPARISON
+# ============================================================
+
+print("\n" + "=" * 70)
+print("CHANNEL-WISE COMPARISON")
+print("=" * 70)
+
+
+channel_results = {}
+
+
+for feature in FEATURE_NAMES:
+
+    tp_values = tp_features[
+        feature
+    ]
+
+    fp_values = fp_features[
+        feature
+    ]
+
+
+    tp_mean = np.mean(
+        tp_values,
+        axis=0
+    )
+
+    fp_mean = np.mean(
+        fp_values,
+        axis=0
+    )
+
+
+    difference = (
+        fp_mean -
+        tp_mean
+    )
+
+
+    relative_difference = (
+        difference /
+        (
+            np.abs(tp_mean) +
+            1e-8
+        )
+    )
+
+
+    channel_results[
+        feature
+    ] = {
+
+        "tp_mean": tp_mean.tolist(),
+
+        "fp_mean": fp_mean.tolist(),
+
+        "difference": difference.tolist(),
+
+        "relative_difference":
+            relative_difference.tolist(),
+
+    }
+
+
+# ============================================================
+# PRINT TOP CHANNELS
+# ============================================================
+
+for feature in FEATURE_NAMES:
+
+    relative_difference = np.asarray(
+        channel_results[
+            feature
+        ][
+            "relative_difference"
+        ]
+    )
+
+
+    ranking = np.argsort(
+        np.abs(
+            relative_difference
+        )
+    )[::-1]
+
+
+    print(
+        f"\n{feature.upper()}"
+    )
+
+
+    for channel_index in ranking[
+        :TOP_CHANNELS
+    ]:
+
+        print(
+            f"Channel {channel_index + 1:02d} | "
+            f"relative difference = "
+            f"{relative_difference[channel_index]:+.4f}"
+        )
+
+
+# ============================================================
+# PATIENT-LEVEL CHANNEL ANALYSIS
+# ============================================================
+
+print("\n" + "=" * 70)
+print("PATIENT-LEVEL CHANNEL ANALYSIS")
+print("=" * 70)
+
+
+unique_patients = np.unique(
+    patients[fp_positions]
+)
+
+
+patient_results = {}
+
+
+for patient in unique_patients:
+
+    patient_positions = fp_positions[
+        patients[fp_positions] ==
+        patient
+    ]
+
+
+    print(
+        f"\nPatient {patient}: "
+        f"{len(patient_positions)} FP windows"
+    )
+
+
+    patient_features = collect_features(
+        patient_positions,
+        f"FP - {patient}"
+    )
+
+
+    patient_summary = {}
+
+
+    for feature in FEATURE_NAMES:
+
+        values = patient_features[
+            feature
+        ]
+
+
+        patient_summary[
+            feature
+        ] = {
+
+            "mean_by_channel":
+                np.mean(
+                    values,
+                    axis=0
+                ).tolist(),
+
+            "median_by_channel":
+                np.median(
+                    values,
+                    axis=0
+                ).tolist(),
+
+        }
+
+
+    patient_results[
+        str(patient)
+    ] = {
+
+        "count":
+            int(
+                len(patient_positions)
+            ),
+
+        "features":
+            patient_summary,
+
+    }
+
+
+# ============================================================
+# VISUALIZATION
+# ============================================================
+
+OUTPUT_DIR.mkdir(
+    parents=True,
+    exist_ok=True
+)
+
+
+# ============================================================
+# CHANNEL HEATMAPS
+# ============================================================
+
+for feature in [
+
+    "rms",
+    "variance",
+    "peak_to_peak",
+    "line_length",
+    "zero_crossing_rate",
+
+]:
+
+    tp_mean = np.mean(
+        tp_features[feature],
+        axis=0
+    )
+
+    fp_mean = np.mean(
+        fp_features[feature],
+        axis=0
+    )
+
+
+    ratio = (
+        fp_mean /
+        (
+            tp_mean +
+            1e-8
+        )
+    )
+
+
+    plt.figure(
+        figsize=(14, 5)
+    )
+
+
+    plt.bar(
+        np.arange(
+            EXPECTED_CHANNELS
+        ),
+        ratio
+    )
+
+
+    plt.axhline(
+        1.0,
+        linestyle="--",
+        linewidth=1
+    )
+
+
+    plt.xticks(
+        np.arange(
+            EXPECTED_CHANNELS
+        ),
+        [
+            f"Ch {i + 1}"
+            for i in range(
+                EXPECTED_CHANNELS
+            )
+        ],
+        rotation=45
+    )
+
+
+    plt.ylabel(
+        "FP / TP ratio"
+    )
+
+
+    plt.title(
+        f"FP vs TP Channel Ratio: {feature}"
+    )
+
+
+    plt.grid(
+        axis="y",
+        alpha=0.3
+    )
+
+
+    plt.tight_layout()
+
+
+    output_path = (
+        OUTPUT_DIR /
+        f"{feature}_channel_ratio.png"
+    )
+
+
+    plt.savefig(
+        output_path,
+        dpi=150
+    )
+
+
+    plt.close()
+
+
+# ============================================================
+# ZERO CROSSING CHANNEL ANALYSIS
+# ============================================================
+
+zcr_tp = np.mean(
+    tp_features[
+        "zero_crossing_rate"
+    ],
+    axis=0
+)
+
+zcr_fp = np.mean(
+    fp_features[
+        "zero_crossing_rate"
+    ],
+    axis=0
+)
+
+
+plt.figure(
+    figsize=(14, 5)
+)
+
+
+plt.plot(
+    np.arange(
+        EXPECTED_CHANNELS
+    ),
+    zcr_tp,
+    marker="o",
+    label="TP"
+)
+
+
+plt.plot(
+    np.arange(
+        EXPECTED_CHANNELS
+    ),
+    zcr_fp,
+    marker="o",
+    label="FP"
+)
+
+
+plt.xticks(
+    np.arange(
+        EXPECTED_CHANNELS
+    ),
+    [
+        f"Ch {i + 1}"
+        for i in range(
+            EXPECTED_CHANNELS
+        )
+    ],
+    rotation=45
+)
+
+
+plt.ylabel(
+    "Zero Crossing Rate"
+)
+
+
+plt.title(
+    "TP vs FP Zero Crossing Rate by Channel"
+)
+
+
+plt.legend()
+
+
+plt.grid(
+    alpha=0.3
+)
+
+
+plt.tight_layout()
+
+
+plt.savefig(
+    OUTPUT_DIR /
+    "zero_crossing_rate_by_channel.png",
+    dpi=150
+)
+
+
+plt.close()
+
+
+# ============================================================
 # SAVE RESULTS
-# ================================================================
-
-print()
-print("=" * 70)
-print("5. SAVING RESULTS")
-print("=" * 70)
-
+# ============================================================
 
 results = {
 
-    "threshold": float(threshold),
+    "settings": {
 
-    "tp_count": int(len(TP)),
+        "threshold":
+            THRESHOLD,
 
-    "fp_count": int(len(FP)),
+        "expected_channels":
+            EXPECTED_CHANNELS,
 
-    "channel_count": int(X.shape[1]),
+        "expected_samples":
+            EXPECTED_SAMPLES,
 
-    "rms_ratio_fp_tp":
-        rms_ratio.tolist(),
+    },
 
-    "ptp_ratio_fp_tp":
-        ptp_ratio.tolist(),
 
-    "fp_channel_rms":
-        fp_stats["rms_mean"].tolist(),
+    "classification": {
 
-    "tp_channel_rms":
-        tp_stats["rms_mean"].tolist(),
+        "tp":
+            int(len(tp_positions)),
 
-    "fp_channel_ptp":
-        fp_stats["ptp_mean"].tolist(),
+        "fp":
+            int(len(fp_positions)),
 
-    "tp_channel_ptp":
-        tp_stats["ptp_mean"].tolist(),
+    },
 
-    "top_rms_channels":
-        ranking[:10].tolist()
+
+    "channel_results":
+        channel_results,
+
+
+    "patient_results":
+        patient_results,
+
 }
 
 
 with open(
-    OUTPUT_FILE,
+    OUTPUT_JSON,
     "w",
     encoding="utf-8"
 ) as f:
@@ -393,34 +829,32 @@ with open(
     json.dump(
         results,
         f,
-        indent=2
+        indent=4
     )
 
 
-print()
-print(
-    "[OK] Saved:"
-)
+# ============================================================
+# FINAL OUTPUT
+# ============================================================
 
-print(
-    OUTPUT_FILE
-)
-
-
-print()
-print("=" * 70)
-print("CHANNEL IMPORTANCE ANALYSIS COMPLETED")
+print("\n" + "=" * 70)
+print("ANALYSIS COMPLETED")
 print("=" * 70)
 
-print()
 print(
-    "Model was NOT modified."
+    "\nResults saved to:"
 )
 
 print(
-    "Dataset was NOT modified."
+    OUTPUT_JSON
 )
 
 print(
-    "Threshold was NOT modified."
+    "\nPlots saved to:"
 )
+
+print(
+    OUTPUT_DIR
+)
+
+print("\nDONE")

@@ -26,3 +26,13 @@ src/evaluation_results*.json
 
 # Windows files
 desktop.ini
+
+# Large numpy files
+*.npz
+
+# EEG raw data
+*.edf
+
+# Python cache
+__pycache__/
+*.pyc
