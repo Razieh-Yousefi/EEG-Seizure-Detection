@@ -392,61 +392,111 @@ def main():
     # CONFUSION MATRIX
     # ========================================================
 
-
-    cm=confusion_matrix(
-
+    cm = confusion_matrix(
         y_true,
-
-        y_pred
-
+        y_pred,
+        labels=[0, 1]
     )
 
-
-    plt.figure(
-        figsize=(6,5)
+    # Row-normalized percentages
+    cm_percent = (
+        cm.astype(float)
+        / cm.sum(axis=1, keepdims=True)
+        * 100.0
     )
 
+    print("\nConfusion Matrix:")
+    print(cm)
 
-    plt.imshow(
-        cm
+    print("\nConfusion Matrix Percentages:")
+    print(cm_percent)
+
+    fig, ax = plt.subplots(
+        figsize=(8, 7)
     )
 
-
-    plt.title(
-        "Confusion Matrix"
+    im = ax.imshow(
+        cm_percent,
+        interpolation="nearest",
+        cmap="Blues",
+        vmin=0,
+        vmax=100
     )
 
-
-    plt.xlabel(
-        "Predicted"
+    ax.set_title(
+        f"Confusion Matrix (Threshold = {threshold:.2f})",
+        fontsize=15
     )
 
-
-    plt.ylabel(
-        "True"
+    ax.set_xlabel(
+        "Predicted Class",
+        fontsize=12
     )
 
+    ax.set_ylabel(
+        "True Class",
+        fontsize=12
+    )
 
+    ax.set_xticks([0, 1])
+    ax.set_yticks([0, 1])
+
+    ax.set_xticklabels(
+        ["Non-Seizure", "Seizure"]
+    )
+
+    ax.set_yticklabels(
+        ["Non-Seizure", "Seizure"]
+    )
+
+    # Write count + percentage in every cell
     for i in range(2):
 
         for j in range(2):
 
-            plt.text(
-
+            ax.text(
                 j,
-
                 i,
-
-                cm[i,j],
-
+                f"{cm[i, j]}\n"
+                f"{cm_percent[i, j]:.2f}%",
                 ha="center",
-
-                va="center"
-
+                va="center",
+                fontsize=13,
+                color="black"
             )
 
+    cbar = fig.colorbar(
+        im,
+        ax=ax
+    )
 
-    plt.colorbar()
+    cbar.set_label(
+        "Percentage (%)"
+    )
+
+    fig.tight_layout()
+
+    confusion_path = os.path.join(
+        RESULT_DIR,
+        "confusion_matrix.png"
+    )
+
+    fig.savefig(
+        confusion_path,
+        dpi=300,
+        bbox_inches="tight",
+        facecolor="white"
+    )
+
+    plt.close(fig)
+
+    print(
+        "\nConfusion matrix saved to:"
+    )
+
+    print(
+        confusion_path
+    )
 
 
     plt.savefig(
