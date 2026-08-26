@@ -1,38 +1,58 @@
+# =========================
 # Python
+# =========================
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
 
-# Large data files
-data/
-raw_data/
+# =========================
+# Virtual environments
+# =========================
+.venv/
+venv/
+env/
 
-# Model weights
-models/*.pt
-
-# Temporary files
-*.tmp
-
-# VS Code
+# =========================
+# IDE / OS
+# =========================
 .vscode/
-
-# Evaluation outputs
-results/*.json
-
-# Python cache
-__pycache__/
-
-# Evaluation outputs
-src/evaluation_results*.json
-
-# Windows files
 desktop.ini
 
-# Large numpy files
+# =========================
+# Large / private EEG data
+# =========================
+data/
+raw_data/
+*.edf
 *.npz
 
-# EEG raw data
-*.edf
+# =========================
+# Model weights
+# =========================
+models/*.pt
 
-# Python cache
-__pycache__/
-*.pyc
+# =========================
+# Temporary files
+# =========================
+*.tmp
+
+# =========================
+# Evaluation JSON outputs
+# =========================
+results/*.json
+src/evaluation_results*.json
+
+# =========================
+# Local / intermediate FP analysis
+# =========================
+analysis/analyze_fp_channel_importance_old.py
+archive/
+
+results/FP_chb17_828.png
+results/TP_chb01_2389.png
+
+results/fp_artifact_plots/
+results/fp_tp_channel_plots/
+results/fp_tp_frequency_plots/
+results/fp_tp_signal_plots/
