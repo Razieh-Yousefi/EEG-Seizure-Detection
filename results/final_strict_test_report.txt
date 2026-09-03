@@ -1,0 +1,95 @@
+============================================================================
+FINAL STRICT TEST REPORT
+============================================================================
+
+Project: c:\Users\rezay\Desktop\EEG_Seizure_Project
+Test windows: 3114
+True seizure windows: 93
+True non-seizure windows: 3021
+True seizure events: 92
+Baseline threshold: 0.95
+Artifact threshold: 0.525596
+Artifact threshold source: validation_artifact_rejection_optimization_v2.json
+Artifact rule methodology: validation-frozen
+
+WINDOW LEVEL
+----------------------------------------------------------------------------
+
+baseline
+tp: 78
+fp: 56
+tn: 2965
+fn: 15
+recall: 0.8387096774193549
+specificity: 0.9814630916914929
+precision: 0.582089552238806
+accuracy: 0.9771997430956969
+f1: 0.6872246696035242
+
+strict_validation_frozen
+tp: 76
+fp: 42
+tn: 2979
+fn: 17
+recall: 0.8172043010752689
+specificity: 0.9860973187686196
+precision: 0.6440677966101694
+accuracy: 0.981053307642903
+f1: 0.7203791469194313
+
+Window changes
+Rejected baseline FP: 14
+Rejected baseline TP: 2
+Total rejected model-positive: 16
+FP reduction: 25.0000%
+Recall change: -2.1505 pp
+Specificity change: 0.4634 pp
+Precision change: 6.1978 pp
+Accuracy change: 0.3854 pp
+F1 change: 3.3154 pp
+
+EVENT LEVEL
+----------------------------------------------------------------------------
+
+baseline
+tp: 77
+fp: 56
+fn: 15
+recall: 0.8369565217391305
+precision: 0.5789473684210527
+f1: 0.6844444444444445
+
+strict_validation_frozen
+tp: 75
+fp: 42
+fn: 17
+recall: 0.8152173913043478
+precision: 0.6410256410256411
+f1: 0.7177033492822967
+
+Event changes
+FP reduction: 25.0000%
+Recall change: -2.1739 pp
+Precision change: 6.2078 pp
+F1 change: 3.3259 pp
+
+VALIDATION RULE VERIFICATION
+----------------------------------------------------------------------------
+Validation score reproduction passed: True
+Validation max abs difference: 0.0
+Validation mean abs difference: 0.0
+Threshold source raw value: validation_artifact_rejection_optimization_v2.json
+Threshold source validation-based: TRUE
+Validation threshold cross-check: None
+Validation threshold cross-check path: None
+
+METHODOLOGY
+----------------------------------------------------------------------------
+Test set used for optimization: FALSE
+Test threshold fitting: FALSE
+Test feature fitting: FALSE
+Artifact rule source: VALIDATION-FROZEN
+Strict validation-frozen results used: TRUE
+Previous non-strict results used: FALSE
+Model modified: FALSE
+Dataset modified: FALSE
